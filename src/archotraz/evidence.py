@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 from uuid import uuid4
 
 
@@ -54,8 +55,18 @@ class EvidenceLedger:
         connection.execute("PRAGMA journal_mode = WAL")
         return connection
 
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        """Transactional connection scope that always releases the SQLite handle."""
+        connection = self.connect()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     def initialize(self) -> None:
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -158,7 +169,7 @@ class EvidenceLedger:
 
     def begin_attempt(self, kind: str, inputs: Any, *, request_id: str | None = None) -> str:
         attempt_id = uuid4().hex
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 "INSERT INTO attempts(id, kind, status, started_at, request_id, input_json) VALUES(?, ?, ?, ?, ?, ?)",
                 (attempt_id, kind, "started", utc_now(), request_id, _json(inputs)),
@@ -175,7 +186,7 @@ class EvidenceLedger:
         external_ref: str | None = None,
         request_id: str | None = None,
     ) -> None:
-        with self.connect() as conn:
+        with self._connection() as conn:
             cursor = conn.execute(
                 """
                 UPDATE attempts
@@ -198,7 +209,7 @@ class EvidenceLedger:
         interpretation_status: str = "raw",
     ) -> EvidenceRef:
         observation_id = uuid4().hex
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO observations(id, kind, observed_at, source, external_ref, payload_json, interpretation_status)
@@ -218,7 +229,7 @@ class EvidenceLedger:
 
     def record_failure(self, kind: str, error_text: str, *, attempt_id: str | None = None, payload: Any = None) -> EvidenceRef:
         failure_id = uuid4().hex
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 "INSERT INTO failures(id, kind, occurred_at, attempt_id, error_text, payload_json) VALUES(?, ?, ?, ?, ?, ?)",
                 (failure_id, kind, utc_now(), attempt_id, error_text, _json({} if payload is None else payload)),
@@ -234,7 +245,7 @@ class EvidenceLedger:
         metadata: Any = None,
     ) -> str:
         provenance_id = uuid4().hex
-        with self.connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO provenance(id, evidence_type, evidence_id, source_type, source_ref, captured_at, metadata_json)
@@ -253,12 +264,12 @@ class EvidenceLedger:
         return provenance_id
 
     def table_names(self) -> set[str]:
-        with self.connect() as conn:
+        with self._connection() as conn:
             rows: Iterable[sqlite3.Row] = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
             return {str(row["name"]) for row in rows}
 
     def rows(self, table: str) -> list[dict[str, Any]]:
         if table not in {*CANONICAL_TABLES, "schema_meta"}:
             raise ValueError(f"table is not queryable through this helper: {table}")
-        with self.connect() as conn:
+        with self._connection() as conn:
             return [dict(row) for row in conn.execute(f"SELECT * FROM {table} ORDER BY rowid")]
