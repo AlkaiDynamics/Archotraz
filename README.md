@@ -1,8 +1,8 @@
 # Archotraz
 
-**The Archonic Jail**
+**The Archonic Jail:** An **algorithm orchestration framework** that rounds up useful repository mechanisms and unites them into a collaborative engine for forging high-value software. There is no escape!
 
-Archotraz is a stateful algorithmic search, routing, recombination, falsification, construction, and optimization machine for discovering stronger software configurations from repositories, tools, mechanisms, algorithms, guards, objectives, adapters, and prior experimental evidence.
+Architecturally, Archotraz is a **stateful algorithmic search, routing, recombination, falsification, construction, and optimization machine**. It searches across repositories, tools, mechanisms, algorithms, guards, objectives, adapters, and prior experimental evidence to discover stronger software configurations.
 
 It does not treat a repository as the permanent unit of intelligence. Repositories contribute evidence and mechanisms; configurations and measured system state become first-class experimental objects.
 
