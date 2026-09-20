@@ -7,7 +7,9 @@ from typing import Sequence
 
 from .bopo import BopoConfigurationError, BopoHttpControlPort
 from .config import ArchotrazConfig
+from .detective import Detective, GitHubPublicMetadataSource
 from .evidence import EvidenceLedger
+from .repos import RepoRegistry
 from .warden import Warden
 
 
@@ -24,6 +26,20 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--company-id", help="Bopo company id; enables runtime preflight")
     doctor.add_argument("--provider", default="shell", help="Bopo provider type for preflight (default: shell)")
     doctor.add_argument("--skip-preflight", action="store_true", help="perform health only")
+
+    repo = sub.add_parser("repo", help="manual repository intake")
+    repo_sub = repo.add_subparsers(dest="repo_command", required=True)
+    repo_add = repo_sub.add_parser("add", help="create or reuse a canonical RepoRecord")
+    repo_add.add_argument("url", help="GitHub repository URL")
+    repo_add.add_argument("--db", type=Path, help="override the SQLite ledger path")
+    repo_add.add_argument("--priority", type=int, help="optional user-supplied priority")
+    repo_add.add_argument("--tag", action="append", default=[], help="repeatable user tag")
+    repo_add.add_argument("--note", help="optional intake note")
+
+    detective = sub.add_parser("detective", help="run cheap metadata triage for an existing RepoRecord")
+    detective.add_argument("repo_id", help="RepoRecord id")
+    detective.add_argument("--db", type=Path, help="override the SQLite ledger path")
+    detective.add_argument("--timeout", type=float, default=10.0, help="metadata request timeout in seconds")
 
     return parser
 
@@ -47,6 +63,26 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "init":
         print(json.dumps({"ok": True, "ledger": str(config.db_path), "dry_mode": config.dry_mode}))
+        return 0
+
+    if args.command == "repo":
+        registry = RepoRegistry(ledger)
+        if args.repo_command == "add":
+            result = registry.add_manual(
+                args.url,
+                priority=args.priority,
+                tags=tuple(args.tag),
+                notes=args.note,
+            )
+            print(json.dumps({"created": result.created, "repo": result.record.to_dict()}, indent=2, sort_keys=True))
+            return 0
+        raise AssertionError(f"unhandled repo command: {args.repo_command}")
+
+    if args.command == "detective":
+        registry = RepoRegistry(ledger)
+        source = GitHubPublicMetadataSource(timeout_seconds=args.timeout)
+        result = Detective(ledger=ledger, registry=registry, source=source).triage(args.repo_id)
+        print(json.dumps({"ok": True, "source": result.source_type, "result": result.payload}, indent=2, sort_keys=True))
         return 0
 
     if args.command == "doctor":
