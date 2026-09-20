@@ -4,6 +4,8 @@ Status: **FROZEN BASELINE FOR MVP IMPLEMENTATION**
 
 This document records the authoritative architecture recovered from the project transcript and defines the implementation boundary for the first Archotraz build. It is intentionally conservative: confirmed decisions are separated from unresolved bindings, and deferred systems are not promoted into MVP prerequisites.
 
+Implementation decision: the MVP executable baseline is **Python 3.12+ as a modular monolith**. This does not alter the frozen epistemic architecture; see [ADR-0001](./ADR-0001-python-modular-monolith.md).
+
 ## 1. System identity
 
 Archotraz is a **stateful algorithmic search, routing, recombination, falsification, construction, and optimization machine**.
