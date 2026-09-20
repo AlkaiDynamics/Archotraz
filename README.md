@@ -21,7 +21,7 @@ See [docs/architecture/ARCHITECTURE_CONTRACT.md](docs/architecture/ARCHITECTURE_
 The current executable baseline is **Python 3.12+ as a modular monolith** with no runtime dependencies beyond the Python standard library.
 
 ```bash
-python -m pip install -e . --no-build-isolation
+python -m pip install -e .
 archotraz init
 ```
 
