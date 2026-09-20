@@ -651,23 +651,34 @@ A valid successful outcome may be:
 
 Archotraz optimizes the configuration, not component count.
 
-## 15. Unresolved bindings — do not invent
+## 15. Runtime binding status
+
+### Resolved — Bopo
+
+The selected Bopo repository is:
+
+```text
+https://github.com/bopodev/bopo
+```
+
+The MVP integration boundary is frozen in [../integrations/BOPO_BINDING.md](../integrations/BOPO_BINDING.md).
+
+Bopo is the local runtime/control shell. Archotraz retains canonical evidence authority in SQLite; Bopo runtime/database state is operational state only.
+
+### Unresolved — do not invent
 
 The following remain explicitly unresolved:
 
 1. **Concrete hostile-code sandbox implementation.**
    The isolation door is required, but its implementation has not been authoritatively selected.
 
-2. **Exact Bopo version and local integration surface.**
-   Bopo's role is confirmed; the adapter/interface binding remains implementation work.
-
-3. **Exact initial thresholds for cell movement and Kitchen promotion.**
+2. **Exact initial thresholds for cell movement and Kitchen promotion.**
    These must be measured/configured rather than fabricated.
 
-4. **Target-machine empirical budgets.**
+3. **Target-machine empirical budgets.**
    Latency, RAM, build time, and operating-cost limits must be measured on the actual environment.
 
-5. **Final calibration for promotion of algorithms out of Psych Ward.**
+4. **Final calibration for promotion of algorithms out of Psych Ward.**
    Lifecycle is known; exact thresholds are not.
 
 These unresolved bindings do not block implementation through the first real Guard run.
