@@ -16,6 +16,17 @@ class EvidenceLedgerTests(unittest.TestCase):
             meta = ledger.rows("schema_meta")
             self.assertEqual(meta, [{"key": "schema_version", "value": "1"}])
 
+    def test_ledger_operations_release_database_handle(self) -> None:
+        """Regression: Windows must be able to delete the DB after ledger operations."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ledger.db"
+            ledger = EvidenceLedger(path)
+            ledger.initialize()
+            ledger.table_names()
+            ledger.rows("schema_meta")
+            path.unlink()
+            self.assertFalse(path.exists())
+
     def test_attempt_observation_and_provenance_are_persisted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             ledger = EvidenceLedger(Path(tmp) / "ledger.db")
