@@ -46,7 +46,7 @@ class PairEnumerationGuardTests(unittest.TestCase):
         self.assertTrue(contract.deterministic)
         self.assertFalse(contract.seed_required)
         self.assertIn("current CellPlacement", contract.consumes)
-        self.assertIn("pair proposals", contract.produces)
+        self.assertIn("complete unordered pair proposals", contract.produces)
         self.assertIn("no scoring", contract.constraints)
         self.assertIn("no repository rejection", contract.constraints)
 
