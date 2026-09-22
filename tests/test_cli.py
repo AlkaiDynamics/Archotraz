@@ -70,6 +70,80 @@ class CliTests(unittest.TestCase):
             self.assertEqual(first["repo"]["tags"], ["core"])
             self.assertEqual(first["repo"]["notes"], "manual intake")
 
+    def test_profile_cli_preserves_missingness_without_detective_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "archotraz.db"
+
+            add_stdout = io.StringIO()
+            with redirect_stdout(add_stdout):
+                main(
+                    [
+                        "repo",
+                        "add",
+                        "https://github.com/AlkaiDynamics/Archotraz",
+                        "--db",
+                        str(db),
+                    ]
+                )
+            repo_id = json.loads(add_stdout.getvalue())["repo"]["repo_id"]
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = main(["profile", repo_id, "--db", str(db)])
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["repo_id"], repo_id)
+            self.assertIsNone(payload["language"])
+            self.assertIn("language", payload["missing_fields"])
+
+    def test_cell_cli_assigns_explicit_block_and_shows_history(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "archotraz.db"
+
+            add_stdout = io.StringIO()
+            with redirect_stdout(add_stdout):
+                main(
+                    [
+                        "repo",
+                        "add",
+                        "https://github.com/AlkaiDynamics/Archotraz",
+                        "--db",
+                        str(db),
+                    ]
+                )
+            repo_id = json.loads(add_stdout.getvalue())["repo"]["repo_id"]
+
+            assign_stdout = io.StringIO()
+            with redirect_stdout(assign_stdout):
+                assign_code = main(
+                    [
+                        "cell",
+                        "assign",
+                        repo_id,
+                        "--block",
+                        "GEN_POP",
+                        "--reason",
+                        "initial explicit placement",
+                        "--db",
+                        str(db),
+                    ]
+                )
+
+            show_stdout = io.StringIO()
+            with redirect_stdout(show_stdout):
+                show_code = main(["cell", "show", repo_id, "--db", str(db)])
+
+            assigned = json.loads(assign_stdout.getvalue())
+            shown = json.loads(show_stdout.getvalue())
+
+            self.assertEqual(assign_code, 0)
+            self.assertEqual(show_code, 0)
+            self.assertEqual(assigned["block"], "GEN_POP")
+            self.assertEqual(shown["current"]["block"], "GEN_POP")
+            self.assertEqual(len(shown["history"]), 1)
+            self.assertEqual(shown["history"][0]["reason"], "initial explicit placement")
+
 
 if __name__ == "__main__":
     unittest.main()
