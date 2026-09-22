@@ -12,6 +12,7 @@ from .config import ArchotrazConfig
 from .evidence import EvidenceLedger
 from .guards import PairEnumerationGuard
 from .processor import EpistemicallyBoundedProcessor
+from .processor_matrix import EpistemicallyBoundedMatrixBuilder
 from .repositories import ManualRepositoryIngestor
 from .warden import Warden
 
@@ -72,6 +73,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     process_features.add_argument("repo_record_id", help="canonical RepoRecord id")
     process_features.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    process_matrix = sub.add_parser(
+        "process-matrix",
+        help="project explicit Processor feature snapshots into typed X plus explicit missingness M",
+    )
+    process_matrix.add_argument(
+        "snapshot_observation_ids",
+        nargs="+",
+        help="explicit processor.feature_snapshot observation ids",
+    )
+    process_matrix.add_argument("--db", type=Path, help="override the SQLite ledger path")
 
     doctor = sub.add_parser("doctor", help="check the Bopo control boundary and record results in SQLite")
     doctor.add_argument("--db", type=Path, help="override the SQLite ledger path")
@@ -198,6 +210,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         snapshot = EpistemicallyBoundedProcessor(ledger).extract(args.repo_record_id)
         payload = snapshot.to_payload()
         payload.update({"ok": True, "processor": EpistemicallyBoundedProcessor.name})
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
+
+    if args.command == "process-matrix":
+        matrix = EpistemicallyBoundedMatrixBuilder(ledger).build(args.snapshot_observation_ids)
+        payload = matrix.to_payload()
+        payload.update({"ok": True, "processor": EpistemicallyBoundedMatrixBuilder.name})
         print(json.dumps(payload, indent=2, sort_keys=True, default=str))
         return 0
 
