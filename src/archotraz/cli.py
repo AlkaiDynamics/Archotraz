@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .bopo import BopoConfigurationError, BopoHttpControlPort
+from .cells import CellHousing, CellPlacement
 from .config import ArchotrazConfig
 from .evidence import EvidenceLedger
 from .repositories import ManualRepositoryIngestor
@@ -76,6 +77,22 @@ def _config_from_args(args: argparse.Namespace) -> ArchotrazConfig:
     )
 
 
+def _placement_payload(placement: CellPlacement | None) -> dict[str, object] | None:
+    if placement is None:
+        return None
+    return {
+        "repo_record_id": placement.repo_record_id,
+        "block": placement.block.value,
+        "cell_id": placement.cell_id,
+        "stage": placement.stage,
+        "eligibility": placement.eligibility,
+        "version": placement.version,
+        "rationale": placement.rationale,
+        "evidence_basis": list(placement.evidence_basis),
+        "decision_id": placement.decision_id,
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     config = _config_from_args(args)
@@ -111,6 +128,32 @@ def main(argv: Sequence[str] | None = None) -> int:
                 indent=2,
                 sort_keys=True,
                 default=str,
+            )
+        )
+        return 0
+
+    if args.command == "place-cell":
+        placement = CellHousing(ledger).place(
+            args.repo_record_id,
+            block=args.block,
+            cell_id=args.cell_id,
+            rationale=args.rationale,
+        )
+        print(json.dumps({"ok": True, "placement": _placement_payload(placement)}, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "cell-current":
+        placement = CellHousing(ledger).current(args.repo_record_id)
+        print(json.dumps({"ok": True, "placement": _placement_payload(placement)}, indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "cell-history":
+        history = CellHousing(ledger).history(args.repo_record_id)
+        print(
+            json.dumps(
+                {"ok": True, "history": [_placement_payload(placement) for placement in history]},
+                indent=2,
+                sort_keys=True,
             )
         )
         return 0
