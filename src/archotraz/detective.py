@@ -28,6 +28,10 @@ class RepoMetadataSource(Protocol):
 class GitHubPublicMetadataSource:
     timeout_seconds: float = 10.0
 
+    def __post_init__(self) -> None:
+        if self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be greater than zero")
+
     def inspect(self, record: RepoRecord) -> SourceObservation:
         if record.provider != "github":
             raise DetectiveSourceError(f"unsupported provider: {record.provider}")
