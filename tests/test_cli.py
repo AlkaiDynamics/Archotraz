@@ -201,6 +201,46 @@ class CliTests(unittest.TestCase):
             for forbidden in ("score", "rank", "best", "recommendation", "synergy", "compatibility"):
                 self.assertNotIn(forbidden, serialized)
 
+    def test_parser_exposes_process_features_without_authority_options(self) -> None:
+        parser = build_parser()
+        subparsers = next(
+            action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+        )
+        self.assertIn("process-features", subparsers.choices)
+        processor_parser = subparsers.choices["process-features"]
+        option_strings = {option for action in processor_parser._actions for option in action.option_strings}
+        for forbidden in ("--block", "--place", "--move", "--score", "--rank", "--guard", "--recommend", "--admit", "--reject"):
+            self.assertNotIn(forbidden, option_strings)
+
+    def test_process_features_cli_returns_partial_pre_intake_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "state" / "archotraz.db"
+            ledger = EvidenceLedger(db)
+            ledger.initialize()
+            ManualRepositoryIngestor(ledger, dry_mode=True).ingest(
+                REPO_URL,
+                priority="research",
+                tags=("evidence",),
+                desired_block="C",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = main(["process-features", REPO_ID, "--db", str(db)])
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["processor"], "epistemically_bounded_feature_extraction")
+            self.assertEqual(payload["evidence_scope"], "pre_intake")
+            self.assertEqual(payload["completeness"], "partial")
+            self.assertEqual(payload["features"]["provider"]["value"], "github")
+            self.assertEqual(payload["features"]["mechanisms"]["state"], "unknown")
+            self.assertIsNone(payload["features"]["mechanisms"]["value"])
+            self.assertTrue(payload["missingness"]["mechanisms"])
+            self.assertNotIn("desired_block", payload["features"])
+            self.assertEqual(ledger.rows("decisions"), [])
+
 
 if __name__ == "__main__":
     unittest.main()
