@@ -15,10 +15,11 @@ spec.loader.exec_module(cascade)
 
 
 class CascadeBuildTests(unittest.TestCase):
-    def test_default_plan_never_claims_future_stages_are_ready(self) -> None:
+    def test_default_plan_claims_ready_only_for_implemented_stages(self) -> None:
         stages = cascade.load_stages(None)
         self.assertTrue(cascade.ready(stages[0]))
-        self.assertTrue(all(not cascade.ready(stage) for stage in stages[1:]))
+        self.assertTrue(cascade.ready(stages[1]))
+        self.assertTrue(all(not cascade.ready(stage) for stage in stages[2:]))
 
     def test_independent_tracks_can_be_selected_without_running_unrelated_gate(self) -> None:
         stages = [
