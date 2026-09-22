@@ -10,7 +10,7 @@ from typing import Any, Iterable, Iterator
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 CANONICAL_TABLES = (
     "observations",
     "claims",
@@ -21,7 +21,7 @@ CANONICAL_TABLES = (
     "contradictions",
     "provenance",
 )
-STATE_TABLES = ("repo_records",)
+STATE_TABLES = ("repo_records", "cell_assignments")
 
 
 def utc_now() -> str:
@@ -173,11 +173,28 @@ class EvidenceLedger:
                     updated_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS cell_assignments (
+                    id TEXT PRIMARY KEY,
+                    repo_id TEXT NOT NULL,
+                    block TEXT NOT NULL,
+                    cell_label TEXT,
+                    assignment_source TEXT NOT NULL,
+                    policy_ref TEXT,
+                    reason TEXT NOT NULL,
+                    assigned_at TEXT NOT NULL,
+                    superseded_at TEXT,
+                    FOREIGN KEY (repo_id) REFERENCES repo_records(id)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_attempts_kind_started ON attempts(kind, started_at);
                 CREATE INDEX IF NOT EXISTS idx_observations_kind_observed ON observations(kind, observed_at);
                 CREATE INDEX IF NOT EXISTS idx_provenance_evidence ON provenance(evidence_type, evidence_id);
                 CREATE INDEX IF NOT EXISTS idx_repo_records_provider_owner_name
                     ON repo_records(provider, owner, name);
+                CREATE INDEX IF NOT EXISTS idx_cell_assignments_repo_history
+                    ON cell_assignments(repo_id, assigned_at);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_cell_assignments_one_active
+                    ON cell_assignments(repo_id) WHERE superseded_at IS NULL;
                 """
             )
             conn.execute(
