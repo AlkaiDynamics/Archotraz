@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import Sequence
 
 from .bopo import BopoConfigurationError, BopoHttpControlPort
+from .cells import CellBlock, CellHousing
 from .config import ArchotrazConfig
 from .detective import Detective, GitHubPublicMetadataSource
 from .evidence import EvidenceLedger
+from .processor import Processor
 from .repos import RepoRegistry
 from .warden import Warden
 
@@ -40,6 +42,25 @@ def build_parser() -> argparse.ArgumentParser:
     detective.add_argument("repo_id", help="RepoRecord id")
     detective.add_argument("--db", type=Path, help="override the SQLite ledger path")
     detective.add_argument("--timeout", type=float, default=10.0, help="metadata request timeout in seconds")
+
+    profile = sub.add_parser("profile", help="build a deterministic profile from recorded evidence")
+    profile.add_argument("repo_id", help="RepoRecord id")
+    profile.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    cell = sub.add_parser("cell", help="inspect or explicitly assign reversible Cell state")
+    cell_sub = cell.add_subparsers(dest="cell_command", required=True)
+
+    cell_assign = cell_sub.add_parser("assign", help="explicitly assign a repository to a Cell block")
+    cell_assign.add_argument("repo_id", help="RepoRecord id")
+    cell_assign.add_argument("--block", required=True, choices=[block.value for block in CellBlock])
+    cell_assign.add_argument("--reason", required=True, help="human/policy rationale for this assignment")
+    cell_assign.add_argument("--cell", dest="cell_label", help="optional cell label within the block")
+    cell_assign.add_argument("--policy-ref", help="optional policy/version reference")
+    cell_assign.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    cell_show = cell_sub.add_parser("show", help="show current Cell assignment and assignment history")
+    cell_show.add_argument("repo_id", help="RepoRecord id")
+    cell_show.add_argument("--db", type=Path, help="override the SQLite ledger path")
 
     return parser
 
@@ -84,6 +105,43 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = Detective(ledger=ledger, registry=registry, source=source).triage(args.repo_id)
         print(json.dumps({"ok": True, "source": result.source_type, "result": result.payload}, indent=2, sort_keys=True))
         return 0
+
+    if args.command == "profile":
+        registry = RepoRegistry(ledger)
+        profile = Processor(ledger=ledger, registry=registry).profile(args.repo_id)
+        print(json.dumps(profile.to_dict(), indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "cell":
+        registry = RepoRegistry(ledger)
+        housing = CellHousing(ledger=ledger, registry=registry)
+        if args.cell_command == "assign":
+            assignment = housing.assign(
+                args.repo_id,
+                CellBlock(args.block),
+                source="manual",
+                reason=args.reason,
+                cell_label=args.cell_label,
+                policy_ref=args.policy_ref,
+            )
+            print(json.dumps(assignment.to_dict(), indent=2, sort_keys=True))
+            return 0
+        if args.cell_command == "show":
+            current = housing.current(args.repo_id)
+            history = housing.history(args.repo_id)
+            print(
+                json.dumps(
+                    {
+                        "repo_id": args.repo_id,
+                        "current": None if current is None else current.to_dict(),
+                        "history": [item.to_dict() for item in history],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
+        raise AssertionError(f"unhandled cell command: {args.cell_command}")
 
     if args.command == "doctor":
         port = BopoHttpControlPort(
