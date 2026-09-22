@@ -60,6 +60,11 @@ def canonicalize_repo_url(raw_url: str) -> RepoIdentity:
         raise RepoInputError("repository URL is required")
 
     parsed = urlsplit(raw)
+    if parsed.scheme.lower() not in {"http", "https"}:
+        raise RepoInputError("repository URL must use http or https")
+    if parsed.username is not None or parsed.password is not None:
+        raise RepoInputError("repository URL must not embed credentials")
+
     host = (parsed.hostname or "").lower()
     if host == "www.github.com":
         host = "github.com"
