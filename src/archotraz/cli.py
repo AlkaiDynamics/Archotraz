@@ -10,7 +10,8 @@ from .cells import CellBlock, CellHousing
 from .config import ArchotrazConfig
 from .detective import Detective, GitHubPublicMetadataSource
 from .evidence import EvidenceLedger
-from .guards import PairEligibilityGuard, PairUniverse
+from .guards import PairCandidate, PairEligibilityGuard, PairUniverse
+from .primitives import PrimitiveEvidenceStore, RawPairProjector
 from .processor import Processor
 from .repos import RepoRegistry
 from .warden import Warden
@@ -75,6 +76,26 @@ def build_parser() -> argparse.ArgumentParser:
     pair_eligibility.add_argument("repo_a_id", help="first RepoRecord id")
     pair_eligibility.add_argument("repo_b_id", help="second RepoRecord id")
     pair_eligibility.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    primitives = sub.add_parser("primitives", help="record raw evidence-backed matching primitives")
+    primitives_sub = primitives.add_subparsers(dest="primitives_command", required=True)
+    primitives_record = primitives_sub.add_parser("record", help="record one raw primitive observation")
+    primitives_record.add_argument("repo_id", help="RepoRecord id")
+    primitives_record.add_argument("--mechanism", action="append")
+    primitives_record.add_argument("--target", action="append")
+    primitives_record.add_argument("--have", action="append")
+    primitives_record.add_argument("--need", action="append")
+    primitives_record.add_argument("--data-model", action="append")
+    primitives_record.add_argument("--access-pattern", action="append")
+    primitives_record.add_argument("--fidelity", type=float)
+    primitives_record.add_argument("--debt", type=float)
+    primitives_record.add_argument("--source-ref", required=True, help="provenance reference for this observation")
+    primitives_record.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    pair_features = sub.add_parser("pair-features", help="project raw pair relationships without a score")
+    pair_features.add_argument("repo_a_id", help="first RepoRecord id")
+    pair_features.add_argument("repo_b_id", help="second RepoRecord id")
+    pair_features.add_argument("--db", type=Path, help="override the SQLite ledger path")
 
     return parser
 
@@ -190,6 +211,43 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 0
         raise AssertionError(f"unhandled guard command: {args.guard_command}")
+
+    if args.command == "primitives":
+        registry = RepoRegistry(ledger)
+        store = PrimitiveEvidenceStore(ledger=ledger, registry=registry)
+        if args.primitives_command == "record":
+            evidence = store.record(
+                args.repo_id,
+                mechanisms=None if args.mechanism is None else tuple(args.mechanism),
+                targets=None if args.target is None else tuple(args.target),
+                have=None if args.have is None else tuple(args.have),
+                need=None if args.need is None else tuple(args.need),
+                data_models=None if args.data_model is None else tuple(args.data_model),
+                access_patterns=None if args.access_pattern is None else tuple(args.access_pattern),
+                fidelity=args.fidelity,
+                debt=args.debt,
+                source="manual",
+                source_ref=args.source_ref,
+            )
+            profile = store.latest(args.repo_id)
+            print(
+                json.dumps(
+                    {"evidence_id": evidence.evidence_id, "profile": profile.to_dict()},
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
+        raise AssertionError(f"unhandled primitives command: {args.primitives_command}")
+
+    if args.command == "pair-features":
+        registry = RepoRegistry(ledger)
+        store = PrimitiveEvidenceStore(ledger=ledger, registry=registry)
+        registry.get(args.repo_a_id)
+        registry.get(args.repo_b_id)
+        features = RawPairProjector(store).project(PairCandidate(args.repo_a_id, args.repo_b_id))
+        print(json.dumps(features.to_dict(), indent=2, sort_keys=True))
+        return 0
 
     if args.command == "doctor":
         port = BopoHttpControlPort(
