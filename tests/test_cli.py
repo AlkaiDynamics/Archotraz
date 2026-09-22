@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from contextlib import redirect_stdout
+import argparse
 import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from archotraz.cli import main
+from archotraz.cli import build_parser, main
 from archotraz.evidence import EvidenceLedger
 
 
@@ -55,6 +56,15 @@ class CliTests(unittest.TestCase):
             ledger = EvidenceLedger(db)
             kinds = [row["kind"] for row in ledger.rows("observations")]
             self.assertEqual(kinds, ["repo.record", "repo.ingested", "detective.triage"])
+
+    def test_parser_exposes_cell_housing_commands(self) -> None:
+        parser = build_parser()
+        subparsers = next(
+            action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+        )
+        self.assertIn("place-cell", subparsers.choices)
+        self.assertIn("cell-current", subparsers.choices)
+        self.assertIn("cell-history", subparsers.choices)
 
 
 if __name__ == "__main__":
