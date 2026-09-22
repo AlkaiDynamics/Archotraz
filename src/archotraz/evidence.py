@@ -10,7 +10,7 @@ from typing import Any, Iterable, Iterator
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 CANONICAL_TABLES = (
     "observations",
     "claims",
@@ -21,6 +21,7 @@ CANONICAL_TABLES = (
     "contradictions",
     "provenance",
 )
+STATE_TABLES = ("repo_records",)
 
 
 def utc_now() -> str:
@@ -156,9 +157,27 @@ class EvidenceLedger:
                     metadata_json TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS repo_records (
+                    id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    owner TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    source_url TEXT NOT NULL,
+                    canonical_url TEXT NOT NULL,
+                    identity_key TEXT NOT NULL UNIQUE,
+                    priority INTEGER,
+                    tags_json TEXT NOT NULL,
+                    notes TEXT,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_attempts_kind_started ON attempts(kind, started_at);
                 CREATE INDEX IF NOT EXISTS idx_observations_kind_observed ON observations(kind, observed_at);
                 CREATE INDEX IF NOT EXISTS idx_provenance_evidence ON provenance(evidence_type, evidence_id);
+                CREATE INDEX IF NOT EXISTS idx_repo_records_provider_owner_name
+                    ON repo_records(provider, owner, name);
                 """
             )
             conn.execute(
@@ -269,7 +288,7 @@ class EvidenceLedger:
             return {str(row["name"]) for row in rows}
 
     def rows(self, table: str) -> list[dict[str, Any]]:
-        if table not in {*CANONICAL_TABLES, "schema_meta"}:
+        if table not in {*CANONICAL_TABLES, *STATE_TABLES, "schema_meta"}:
             raise ValueError(f"table is not queryable through this helper: {table}")
         with self._connection() as conn:
             return [dict(row) for row in conn.execute(f"SELECT * FROM {table} ORDER BY rowid")]

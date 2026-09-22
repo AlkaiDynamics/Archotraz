@@ -14,7 +14,8 @@ class EvidenceLedgerTests(unittest.TestCase):
             ledger.initialize()
             self.assertTrue(set(CANONICAL_TABLES).issubset(ledger.table_names()))
             meta = ledger.rows("schema_meta")
-            self.assertEqual(meta, [{"key": "schema_version", "value": "1"}])
+            self.assertEqual(meta, [{"key": "schema_version", "value": "2"}])
+            self.assertIn("repo_records", ledger.table_names())
 
     def test_ledger_operations_release_database_handle(self) -> None:
         """Regression: Windows must be able to delete the DB after ledger operations."""
