@@ -64,7 +64,7 @@ class CellHousingTests(unittest.TestCase):
                     rationale="manual placement",
                 )
 
-        self.assertEqual(ledger.rows("decisions"), [])
+            self.assertEqual(ledger.rows("decisions"), [])
 
     def test_invalid_block_fails_closed(self) -> None:
         ledger, housing = self.make_state()
