@@ -11,6 +11,7 @@ from pathlib import Path
 from archotraz.cells import CellBlock, CellHousing
 from archotraz.cli import build_parser, main
 from archotraz.evidence import EvidenceLedger
+from archotraz.processor import EpistemicallyBoundedProcessor
 from archotraz.repositories import ManualRepositoryIngestor
 
 
@@ -239,6 +240,68 @@ class CliTests(unittest.TestCase):
             self.assertIsNone(payload["features"]["mechanisms"]["value"])
             self.assertTrue(payload["missingness"]["mechanisms"])
             self.assertNotIn("desired_block", payload["features"])
+            self.assertEqual(ledger.rows("decisions"), [])
+
+    def test_parser_exposes_process_matrix_without_authority_options(self) -> None:
+        parser = build_parser()
+        subparsers = next(
+            action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+        )
+        self.assertIn("process-matrix", subparsers.choices)
+        matrix_parser = subparsers.choices["process-matrix"]
+        option_strings = {option for action in matrix_parser._actions for option in action.option_strings}
+        for forbidden in ("--encode", "--impute", "--score", "--rank", "--classify", "--block", "--guard", "--recommend", "--admit", "--reject"):
+            self.assertNotIn(forbidden, option_strings)
+
+    def test_process_matrix_cli_projects_only_explicit_snapshot_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "state" / "archotraz.db"
+            ledger = EvidenceLedger(db)
+            ledger.initialize()
+            ingestor = ManualRepositoryIngestor(ledger, dry_mode=True)
+            processor = EpistemicallyBoundedProcessor(ledger)
+
+            bravo = ingestor.ingest(
+                "https://github.com/example/bravo",
+                priority=None,
+                tags=("bravo",),
+            ).record.record_id
+            alpha = ingestor.ingest(
+                "https://github.com/example/alpha",
+                priority="research",
+                tags=("alpha",),
+            ).record.record_id
+            bravo_snapshot = processor.extract(bravo).observation_id
+            alpha_snapshot = processor.extract(alpha).observation_id
+
+            observations_before = len(
+                [row for row in ledger.rows("observations") if row["kind"] == "processor.feature_snapshot"]
+            )
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = main(
+                    [
+                        "process-matrix",
+                        bravo_snapshot,
+                        alpha_snapshot,
+                        "--db",
+                        str(db),
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["processor"], "epistemically_bounded_feature_matrix")
+            self.assertEqual(payload["repo_record_ids"], [alpha, bravo])
+            self.assertEqual(payload["source_snapshot_ids"], [alpha_snapshot, bravo_snapshot])
+            mechanisms_index = payload["feature_names"].index("mechanisms")
+            self.assertIsNone(payload["values"][0][mechanisms_index])
+            self.assertTrue(payload["missingness"][0][mechanisms_index])
+            self.assertEqual(
+                len([row for row in ledger.rows("observations") if row["kind"] == "processor.feature_snapshot"]),
+                observations_before,
+            )
             self.assertEqual(ledger.rows("decisions"), [])
 
 
