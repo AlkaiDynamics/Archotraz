@@ -304,6 +304,69 @@ class CliTests(unittest.TestCase):
             )
             self.assertEqual(ledger.rows("decisions"), [])
 
+    def test_parser_exposes_process_encode_without_authority_options(self) -> None:
+        parser = build_parser()
+        subparsers = next(
+            action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+        )
+        self.assertIn("process-encode", subparsers.choices)
+        encoding_parser = subparsers.choices["process-encode"]
+        option_strings = {option for action in encoding_parser._actions for option in action.option_strings}
+        for forbidden in ("--impute", "--weight", "--score", "--rank", "--classify", "--block", "--guard", "--recommend", "--admit", "--reject"):
+            self.assertNotIn(forbidden, option_strings)
+
+    def test_process_encode_cli_consumes_only_explicit_matrix_observation_id(self) -> None:
+        from archotraz.processor_matrix import EpistemicallyBoundedMatrixBuilder
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "state" / "archotraz.db"
+            ledger = EvidenceLedger(db)
+            ledger.initialize()
+            ingestor = ManualRepositoryIngestor(ledger, dry_mode=True)
+            processor = EpistemicallyBoundedProcessor(ledger)
+
+            alpha = ingestor.ingest(
+                "https://github.com/example/alpha",
+                priority="research",
+                tags=("beta", "alpha"),
+            ).record.record_id
+            bravo = ingestor.ingest(
+                "https://github.com/example/bravo",
+                priority=None,
+                tags=(),
+            ).record.record_id
+            alpha_snapshot = processor.extract(alpha).observation_id
+            bravo_snapshot = processor.extract(bravo).observation_id
+            matrix = EpistemicallyBoundedMatrixBuilder(ledger).build([bravo_snapshot, alpha_snapshot])
+
+            matrices_before = len(
+                [row for row in ledger.rows("observations") if row["kind"] == "processor.feature_matrix"]
+            )
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = main(["process-encode", matrix.observation_id, "--db", str(db)])
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["processor"], "epistemically_bounded_categorical_encoding")
+            self.assertEqual(payload["source_matrix_id"], matrix.observation_id)
+            self.assertEqual(payload["encoded_features"], ["provider", "tags", "priority"])
+            self.assertEqual(payload["vocabularies"]["provider"], ["github"])
+            self.assertEqual(payload["vocabularies"]["tags"], ["alpha", "beta"])
+            priority_columns = [
+                index for index, name in enumerate(payload["encoded_feature_names"]) if name.startswith("priority::")
+            ]
+            self.assertTrue(priority_columns)
+            bravo_row = payload["repo_record_ids"].index(bravo)
+            self.assertTrue(all(payload["encoded_missingness"][bravo_row][index] for index in priority_columns))
+            self.assertTrue(all(payload["encoded_values"][bravo_row][index] is None for index in priority_columns))
+            self.assertEqual(
+                len([row for row in ledger.rows("observations") if row["kind"] == "processor.feature_matrix"]),
+                matrices_before,
+            )
+            self.assertEqual(ledger.rows("decisions"), [])
+
 
 if __name__ == "__main__":
     unittest.main()
