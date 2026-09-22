@@ -156,6 +156,51 @@ class CliTests(unittest.TestCase):
             self.assertEqual([item["version"] for item in payload["history"]], [1, 2])
             self.assertEqual([item["block"] for item in payload["history"]], ["A", "C"])
 
+    def test_parser_exposes_guard_pairs_without_scoring_options(self) -> None:
+        parser = build_parser()
+        subparsers = next(
+            action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+        )
+        self.assertIn("guard-pairs", subparsers.choices)
+        guard_parser = subparsers.choices["guard-pairs"]
+        option_strings = {option for action in guard_parser._actions for option in action.option_strings}
+        for forbidden in ("--score", "--rank", "--best", "--threshold", "--block", "--auto-place", "--recommend"):
+            self.assertNotIn(forbidden, option_strings)
+
+    def test_guard_pairs_cli_returns_complete_unordered_universe(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "state" / "archotraz.db"
+            ledger = EvidenceLedger(db)
+            ledger.initialize()
+            ingestor = ManualRepositoryIngestor(ledger, dry_mode=True)
+            housing = CellHousing(ledger)
+            repo_ids = []
+            for index, name in enumerate(("alpha", "bravo", "charlie")):
+                result = ingestor.ingest(f"https://github.com/example/{name}")
+                repo_ids.append(result.record.record_id)
+                housing.place(
+                    result.record.record_id,
+                    block=("A", "B", "C")[index],
+                    cell_id=f"CELL-{index + 1}",
+                    rationale="explicit CLI test placement",
+                )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = main(["guard-pairs", *repo_ids, "--db", str(db)])
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["guard"], "matcher.exhaustive_pair_enumeration")
+            self.assertEqual(payload["candidate_count"], 3)
+            self.assertEqual(payload["pair_count"], 3)
+            self.assertTrue(payload["complete_unordered_universe"])
+            self.assertEqual(len(payload["pairs"]), 3)
+            serialized = json.dumps(payload).lower()
+            for forbidden in ("score", "rank", "best", "recommendation", "synergy", "compatibility"):
+                self.assertNotIn(forbidden, serialized)
+
 
 if __name__ == "__main__":
     unittest.main()

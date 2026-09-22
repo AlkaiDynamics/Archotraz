@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import json
 from pathlib import Path
 from typing import Sequence
@@ -9,6 +10,7 @@ from .bopo import BopoConfigurationError, BopoHttpControlPort
 from .cells import CellHousing, CellPlacement
 from .config import ArchotrazConfig
 from .evidence import EvidenceLedger
+from .guards import PairEnumerationGuard
 from .repositories import ManualRepositoryIngestor
 from .warden import Warden
 
@@ -55,6 +57,13 @@ def build_parser() -> argparse.ArgumentParser:
     cell_history = sub.add_parser("cell-history", help="show immutable Cell Housing placement history")
     cell_history.add_argument("repo_record_id", help="canonical RepoRecord id")
     cell_history.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    guard_pairs = sub.add_parser(
+        "guard-pairs",
+        help="enumerate the complete unordered pair universe for explicitly placed repositories",
+    )
+    guard_pairs.add_argument("repo_record_ids", nargs="+", help="canonical RepoRecord ids")
+    guard_pairs.add_argument("--db", type=Path, help="override the SQLite ledger path")
 
     doctor = sub.add_parser("doctor", help="check the Bopo control boundary and record results in SQLite")
     doctor.add_argument("--db", type=Path, help="override the SQLite ledger path")
@@ -152,6 +161,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(
             json.dumps(
                 {"ok": True, "history": [_placement_payload(placement) for placement in history]},
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    if args.command == "guard-pairs":
+        result = PairEnumerationGuard(ledger).run(args.repo_record_ids)
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "guard": result.contract.name,
+                    "candidate_count": result.candidate_count,
+                    "pair_count": result.pair_count,
+                    "complete_unordered_universe": result.complete_unordered_universe,
+                    "attempt_id": result.attempt_id,
+                    "pairs": [asdict(pair) for pair in result.pairs],
+                },
                 indent=2,
                 sort_keys=True,
             )
