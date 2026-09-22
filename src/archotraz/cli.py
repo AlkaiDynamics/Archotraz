@@ -10,6 +10,7 @@ from .cells import CellBlock, CellHousing
 from .config import ArchotrazConfig
 from .detective import Detective, GitHubPublicMetadataSource
 from .evidence import EvidenceLedger
+from .guards import PairEligibilityGuard, PairUniverse
 from .processor import Processor
 from .repos import RepoRegistry
 from .warden import Warden
@@ -61,6 +62,19 @@ def build_parser() -> argparse.ArgumentParser:
     cell_show = cell_sub.add_parser("show", help="show current Cell assignment and assignment history")
     cell_show.add_argument("repo_id", help="RepoRecord id")
     cell_show.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    pairs = sub.add_parser("pairs", help="enumerate the complete unordered RepoRecord pair universe")
+    pairs.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    guard = sub.add_parser("guard", help="run a production-authorized Guard")
+    guard_sub = guard.add_subparsers(dest="guard_command", required=True)
+    pair_eligibility = guard_sub.add_parser(
+        "pair-eligibility",
+        help="check distinct identity and explicit Cell readiness without claiming compatibility",
+    )
+    pair_eligibility.add_argument("repo_a_id", help="first RepoRecord id")
+    pair_eligibility.add_argument("repo_b_id", help="second RepoRecord id")
+    pair_eligibility.add_argument("--db", type=Path, help="override the SQLite ledger path")
 
     return parser
 
@@ -142,6 +156,40 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 0
         raise AssertionError(f"unhandled cell command: {args.cell_command}")
+
+    if args.command == "pairs":
+        registry = RepoRegistry(ledger)
+        pairs = PairUniverse(registry).enumerate()
+        print(
+            json.dumps(
+                {
+                    "count": len(pairs),
+                    "pairs": [pair.to_dict() for pair in pairs],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    if args.command == "guard":
+        registry = RepoRegistry(ledger)
+        housing = CellHousing(ledger=ledger, registry=registry)
+        if args.guard_command == "pair-eligibility":
+            guard = PairEligibilityGuard(registry=registry, housing=housing)
+            result = guard.evaluate_ids(args.repo_a_id, args.repo_b_id)
+            print(
+                json.dumps(
+                    {
+                        "contract": guard.contract.to_dict(),
+                        "result": result.to_dict(),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
+        raise AssertionError(f"unhandled guard command: {args.guard_command}")
 
     if args.command == "doctor":
         port = BopoHttpControlPort(
