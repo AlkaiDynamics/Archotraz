@@ -226,6 +226,77 @@ class CliTests(unittest.TestCase):
             self.assertTrue(passed["contract"]["deterministic"])
             self.assertEqual(passed["contract"]["name"], "pair.cell-readiness")
 
+    def test_primitive_evidence_and_raw_pair_features_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "archotraz.db"
+            repo_ids: list[str] = []
+
+            for url in (
+                "https://github.com/AlkaiDynamics/Archotraz",
+                "https://github.com/openai/openai-python",
+            ):
+                stdout = io.StringIO()
+                with redirect_stdout(stdout):
+                    main(["repo", "add", url, "--db", str(db)])
+                repo_ids.append(json.loads(stdout.getvalue())["repo"]["repo_id"])
+
+            with redirect_stdout(io.StringIO()):
+                main(
+                    [
+                        "primitives",
+                        "record",
+                        repo_ids[0],
+                        "--mechanism",
+                        "parser",
+                        "--have",
+                        "python",
+                        "--need",
+                        "sqlite",
+                        "--data-model",
+                        "json",
+                        "--access-pattern",
+                        "cli",
+                        "--source-ref",
+                        "operator:left",
+                        "--db",
+                        str(db),
+                    ]
+                )
+                main(
+                    [
+                        "primitives",
+                        "record",
+                        repo_ids[1],
+                        "--mechanism",
+                        "parser",
+                        "--have",
+                        "sqlite",
+                        "--need",
+                        "python",
+                        "--data-model",
+                        "json",
+                        "--access-pattern",
+                        "cli",
+                        "--source-ref",
+                        "operator:right",
+                        "--db",
+                        str(db),
+                    ]
+                )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = main(["pair-features", repo_ids[0], repo_ids[1], "--db", str(db)])
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["shared_mechanisms"], ["parser"])
+            self.assertEqual(
+                set(payload["a_need_b_have"] + payload["b_need_a_have"]),
+                {"python", "sqlite"},
+            )
+            self.assertIsNone(payload["score"])
+
 
 if __name__ == "__main__":
     unittest.main()
