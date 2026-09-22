@@ -188,9 +188,14 @@ def main(argv: list[str] | None = None) -> int:
             return run(stages, args.state, args.through, args.only)
         receipts = read_state(args.state)["receipts"] if args.action == "status" else {}
         commit = git_commit()
+        verified: set[str] = set()
         for stage in stages:
             receipt = receipts.get(stage["id"], {})
-            valid = receipt.get("key") == stage_key(stage, commit) and receipt.get("status") == "passed"
+            valid = (receipt.get("key") == stage_key(stage, commit)
+                     and receipt.get("status") == "passed"
+                     and all(dep in verified for dep in stage["requires"]))
+            if valid:
+                verified.add(stage["id"])
             status = "verified" if valid else "ready" if ready(stage) else "blocked"
             print(f"{status:8} {stage['id']:24} {stage.get('gate', '')}")
         return 0
