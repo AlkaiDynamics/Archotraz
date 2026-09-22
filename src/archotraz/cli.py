@@ -11,6 +11,7 @@ from .cells import CellHousing, CellPlacement
 from .config import ArchotrazConfig
 from .evidence import EvidenceLedger
 from .guards import PairEnumerationGuard
+from .processor import EpistemicallyBoundedProcessor
 from .repositories import ManualRepositoryIngestor
 from .warden import Warden
 
@@ -64,6 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     guard_pairs.add_argument("repo_record_ids", nargs="+", help="canonical RepoRecord ids")
     guard_pairs.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    process_features = sub.add_parser(
+        "process-features",
+        help="normalize existing RepoRecord/Detective evidence into an explicit partial feature snapshot",
+    )
+    process_features.add_argument("repo_record_id", help="canonical RepoRecord id")
+    process_features.add_argument("--db", type=Path, help="override the SQLite ledger path")
 
     doctor = sub.add_parser("doctor", help="check the Bopo control boundary and record results in SQLite")
     doctor.add_argument("--db", type=Path, help="override the SQLite ledger path")
@@ -184,6 +192,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 sort_keys=True,
             )
         )
+        return 0
+
+    if args.command == "process-features":
+        snapshot = EpistemicallyBoundedProcessor(ledger).extract(args.repo_record_id)
+        payload = snapshot.to_payload()
+        payload.update({"ok": True, "processor": EpistemicallyBoundedProcessor.name})
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
         return 0
 
     if args.command == "doctor":
