@@ -28,6 +28,12 @@ class RepoRegistryTests(unittest.TestCase):
         with self.assertRaises(RepoInputError):
             canonicalize_repo_url("https://example.com/owner/repo")
 
+    def test_rejects_non_http_urls_and_embedded_credentials(self) -> None:
+        with self.assertRaises(RepoInputError):
+            canonicalize_repo_url("ftp://github.com/AlkaiDynamics/Archotraz")
+        with self.assertRaises(RepoInputError):
+            canonicalize_repo_url("https://user:secret@github.com/AlkaiDynamics/Archotraz")
+
     def test_manual_ingest_is_idempotent_and_records_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             registry, ledger = self.make_registry(tmp)
