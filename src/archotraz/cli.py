@@ -12,6 +12,7 @@ from .config import ArchotrazConfig
 from .evidence import EvidenceLedger
 from .guards import PairEnumerationGuard
 from .processor import EpistemicallyBoundedProcessor
+from .processor_encoding import EpistemicallyBoundedCategoricalEncoder
 from .processor_matrix import EpistemicallyBoundedMatrixBuilder
 from .repositories import ManualRepositoryIngestor
 from .warden import Warden
@@ -84,6 +85,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="explicit processor.feature_snapshot observation ids",
     )
     process_matrix.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    process_encode = sub.add_parser(
+        "process-encode",
+        help="encode established categorical identity from one explicit Processor feature matrix",
+    )
+    process_encode.add_argument(
+        "matrix_observation_id",
+        help="explicit processor.feature_matrix observation id",
+    )
+    process_encode.add_argument("--db", type=Path, help="override the SQLite ledger path")
 
     doctor = sub.add_parser("doctor", help="check the Bopo control boundary and record results in SQLite")
     doctor.add_argument("--db", type=Path, help="override the SQLite ledger path")
@@ -217,6 +228,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         matrix = EpistemicallyBoundedMatrixBuilder(ledger).build(args.snapshot_observation_ids)
         payload = matrix.to_payload()
         payload.update({"ok": True, "processor": EpistemicallyBoundedMatrixBuilder.name})
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return 0
+
+    if args.command == "process-encode":
+        encoded = EpistemicallyBoundedCategoricalEncoder(ledger).encode(args.matrix_observation_id)
+        payload = encoded.to_payload()
+        payload.update({"ok": True, "processor": EpistemicallyBoundedCategoricalEncoder.name})
         print(json.dumps(payload, indent=2, sort_keys=True, default=str))
         return 0
 
