@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from archotraz.detective import Detective, SourceObservation
+from archotraz.detective import Detective, GitHubPublicMetadataSource, SourceObservation
 from archotraz.evidence import EvidenceLedger
 from archotraz.repos import RepoRecord, RepoRegistry
 
@@ -29,6 +29,12 @@ class FakeSource:
             source_type="fixture",
             source_ref="fixture://repo-metadata",
         )
+
+
+class GitHubPublicMetadataSourceTests(unittest.TestCase):
+    def test_timeout_must_be_positive(self) -> None:
+        with self.assertRaises(ValueError):
+            GitHubPublicMetadataSource(timeout_seconds=0)
 
 
 class DetectiveTests(unittest.TestCase):
