@@ -236,6 +236,22 @@ class EvidenceLedger:
             )
         return EvidenceRef("failure", failure_id)
 
+    def record_decision(
+        self,
+        kind: str,
+        *,
+        status: str,
+        payload: Any,
+        rationale: str | None = None,
+    ) -> EvidenceRef:
+        decision_id = uuid4().hex
+        with self._connection() as conn:
+            conn.execute(
+                "INSERT INTO decisions(id, kind, decided_at, status, rationale, payload_json) VALUES(?, ?, ?, ?, ?, ?)",
+                (decision_id, kind, utc_now(), status, rationale, _json(payload)),
+            )
+        return EvidenceRef("decision", decision_id)
+
     def record_provenance(
         self,
         evidence: EvidenceRef,
