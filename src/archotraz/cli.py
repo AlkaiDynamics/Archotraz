@@ -40,6 +40,21 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--notes", help="optional manual notes")
     ingest.add_argument("--provenance-ref", help="optional provenance reference for the manual entry")
 
+    place_cell = sub.add_parser("place-cell", help="record an explicit initial Cell Housing placement")
+    place_cell.add_argument("repo_record_id", help="canonical RepoRecord id")
+    place_cell.add_argument("--db", type=Path, help="override the SQLite ledger path")
+    place_cell.add_argument("--block", required=True, choices=["A", "B", "C", "GEN-POP", "AD-SEG"])
+    place_cell.add_argument("--cell", required=True, dest="cell_id", help="cell identifier")
+    place_cell.add_argument("--rationale", required=True, help="explicit placement rationale")
+
+    cell_current = sub.add_parser("cell-current", help="show the current Cell Housing placement")
+    cell_current.add_argument("repo_record_id", help="canonical RepoRecord id")
+    cell_current.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    cell_history = sub.add_parser("cell-history", help="show immutable Cell Housing placement history")
+    cell_history.add_argument("repo_record_id", help="canonical RepoRecord id")
+    cell_history.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
     doctor = sub.add_parser("doctor", help="check the Bopo control boundary and record results in SQLite")
     doctor.add_argument("--db", type=Path, help="override the SQLite ledger path")
     doctor.add_argument("--bopo-url", help="override the Bopo API base URL")
