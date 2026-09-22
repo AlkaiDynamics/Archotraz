@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from archotraz.detective import Detective, GitHubPublicMetadataSource, SourceObservation
@@ -31,10 +33,83 @@ class FakeSource:
         )
 
 
+class FakeHttpResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._raw = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self) -> "FakeHttpResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._raw
+
+
 class GitHubPublicMetadataSourceTests(unittest.TestCase):
     def test_timeout_must_be_positive(self) -> None:
         with self.assertRaises(ValueError):
             GitHubPublicMetadataSource(timeout_seconds=0)
+
+    def test_maps_public_github_metadata_to_raw_observation(self) -> None:
+        record = RepoRecord(
+            repo_id="repo-1",
+            provider="github",
+            owner="AlkaiDynamics",
+            name="Archotraz",
+            source_url="https://github.com/AlkaiDynamics/Archotraz",
+            canonical_url="https://github.com/AlkaiDynamics/Archotraz",
+            identity_key="github:alkaidynamics/archotraz",
+            priority=None,
+            tags=(),
+            notes=None,
+            status="recorded",
+            created_at="now",
+            updated_at="now",
+        )
+        response = FakeHttpResponse(
+            {
+                "id": 123,
+                "full_name": "AlkaiDynamics/Archotraz",
+                "private": False,
+                "fork": False,
+                "archived": False,
+                "disabled": False,
+                "default_branch": "main",
+                "language": "Python",
+                "size": 42,
+                "stargazers_count": 3,
+                "forks_count": 1,
+                "open_issues_count": 2,
+                "license": {"spdx_id": "MIT"},
+                "topics": ["repo-analysis"],
+                "created_at": "created",
+                "updated_at": "updated",
+                "pushed_at": "pushed",
+                "html_url": "https://github.com/AlkaiDynamics/Archotraz",
+            }
+        )
+
+        captured: dict[str, object] = {}
+
+        def fake_urlopen(req, timeout):
+            captured["url"] = req.full_url
+            captured["headers"] = {key.lower(): value for key, value in req.header_items()}
+            captured["timeout"] = timeout
+            return response
+
+        with patch("archotraz.detective.request.urlopen", side_effect=fake_urlopen):
+            observation = GitHubPublicMetadataSource(timeout_seconds=4.5).inspect(record)
+
+        self.assertEqual(captured["url"], "https://api.github.com/repos/AlkaiDynamics/Archotraz")
+        self.assertEqual(captured["timeout"], 4.5)
+        self.assertIn("user-agent", captured["headers"])
+        self.assertEqual(observation.source_type, "github_api")
+        self.assertEqual(observation.source_ref, "https://api.github.com/repos/AlkaiDynamics/Archotraz")
+        self.assertEqual(observation.payload["github_id"], 123)
+        self.assertEqual(observation.payload["license_spdx"], "MIT")
+        self.assertEqual(observation.payload["topics"], ["repo-analysis"])
 
 
 class DetectiveTests(unittest.TestCase):
