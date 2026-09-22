@@ -181,6 +181,17 @@ class ProcessorTests(unittest.TestCase):
             processor.extract(REPO_ID)
             self.assertEqual(ledger.rows("decisions"), before)
 
+    def test_processor_does_not_invoke_cell_housing_or_guard_logic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            processor, _, _ = self.make_processor(tmp)
+            with patch("archotraz.cells.CellHousing.place", side_effect=AssertionError("placement forbidden")), patch(
+                "archotraz.cells.CellHousing.move", side_effect=AssertionError("movement forbidden")
+            ), patch("archotraz.cells.CellHousing.current", side_effect=AssertionError("cell lookup forbidden")), patch(
+                "archotraz.guards.PairEnumerationGuard.run", side_effect=AssertionError("guard execution forbidden")
+            ):
+                snapshot = processor.extract(REPO_ID)
+            self.assertEqual(snapshot.completeness, "partial")
+
     def test_processor_performs_no_network_requests(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             processor, _, _ = self.make_processor(tmp)
@@ -204,6 +215,8 @@ class ProcessorTests(unittest.TestCase):
             serialized = json.dumps(snapshot.normalized_payload(), sort_keys=True).lower()
             for forbidden in ("score", "rank", "recommend", "admit", "reject", "placement", "guard"):
                 self.assertNotIn(forbidden, serialized)
+            for forbidden_method in ("score", "rank", "recommend", "admit", "reject", "place", "move", "run_guard"):
+                self.assertFalse(hasattr(processor, forbidden_method))
 
 
 if __name__ == "__main__":
