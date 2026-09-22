@@ -8,6 +8,7 @@ from typing import Sequence
 from .bopo import BopoConfigurationError, BopoHttpControlPort
 from .config import ArchotrazConfig
 from .evidence import EvidenceLedger
+from .repositories import ManualRepositoryIngestor
 from .warden import Warden
 
 
@@ -17,6 +18,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     init = sub.add_parser("init", help="initialize the canonical SQLite Evidence Ledger")
     init.add_argument("--db", type=Path, help="override the SQLite ledger path")
+
+    ingest = sub.add_parser("ingest-repo", help="manually ingest a repository into the evidence ledger")
+    ingest.add_argument("url", help="repository URL")
+    ingest.add_argument("--db", type=Path, help="override the SQLite ledger path")
+    ingest.add_argument("--priority", help="optional user-supplied priority")
+    ingest.add_argument("--tag", action="append", default=[], help="optional tag; may be repeated")
+    ingest.add_argument("--desired-block", help="optional user-supplied cell-block preference")
+    ingest.add_argument(
+        "--algorithm-override",
+        action="append",
+        default=[],
+        help="optional algorithm override; may be repeated",
+    )
+    ingest.add_argument(
+        "--guard-override",
+        action="append",
+        default=[],
+        help="optional guard override; may be repeated",
+    )
+    ingest.add_argument("--notes", help="optional manual notes")
+    ingest.add_argument("--provenance-ref", help="optional provenance reference for the manual entry")
 
     doctor = sub.add_parser("doctor", help="check the Bopo control boundary and record results in SQLite")
     doctor.add_argument("--db", type=Path, help="override the SQLite ledger path")
@@ -47,6 +69,35 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "init":
         print(json.dumps({"ok": True, "ledger": str(config.db_path), "dry_mode": config.dry_mode}))
+        return 0
+
+    if args.command == "ingest-repo":
+        ingestor = ManualRepositoryIngestor(ledger, dry_mode=config.dry_mode)
+        result = ingestor.ingest(
+            args.url,
+            priority=args.priority,
+            tags=tuple(args.tag),
+            desired_block=args.desired_block,
+            algorithm_overrides=tuple(args.algorithm_override),
+            guard_overrides=tuple(args.guard_override),
+            notes=args.notes,
+            provenance_ref=args.provenance_ref,
+        )
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "created": result.created,
+                    "record": result.record.to_payload(),
+                    "record_evidence_id": result.record_evidence_id,
+                    "ingested_evidence_id": result.ingested_evidence_id,
+                    "detective_evidence_id": result.detective_evidence_id,
+                },
+                indent=2,
+                sort_keys=True,
+                default=str,
+            )
+        )
         return 0
 
     if args.command == "doctor":
